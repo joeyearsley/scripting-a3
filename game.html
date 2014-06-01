@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html>
+
+    <head>
+        <title> Javascript Game </title>
+        <script>
+            //to tell if the user has been placed
+            var userPlaced = 0;
+            //used for input cell creation and manipulation
+            var input = '';
+            var inputs = '';
+            //To keep count of the treasures
+            var treasureCount = 0;
+            //To keep the character code the user pressed
+            var characterCode = '';
+            //The number of rounds played
+            var rounds = 0;
+            //The users score so far
+            var userScore= 0;
+            //The computers score so far
+            var computerScore = 0;
+            //The users current position on the grid
+            var currentUserPos = '0';
+            //The computers current position
+            var currentCompPos;
+            //if its the users turn or not, to allow for back and forth play.
+            var usersTurn = 1;
+            //declare the x & y variables for the grid
+            var x,y;
+            //the length of y to use in padding later
+            var yLen;
+            //to tell when an end condition is made true.
+            var end = false;
+            //to say when a user can't move
+            var cantMoveU = false;
+            //to tell when a computer can't move
+            var cantMoveC = false;
+            //To set the default moves patern
+            var defaultMove = 0;
+            
+            /*
+                Add the relative amount of zeros needed in padding.
+                As they are stripped in some operations.
+            */
+            function buildConcat(z){
+                var numTemp = 0;
+                var concatZero = '';
+                //how many zeros to add, total length of y, minus the length of the number given.
+                for(num = 0; num < (yLen - z.toString().length); num++){
+                    //if its not defined, define it, else add more.
+                    if(concatZero === undefined){concatZero = '0';}
+                    else{concatZero = concatZero + '0';}
+                }
+                return concatZero;
+            }
+            
+            /*
+                The funtion to make the table and input for the setup stage.
+            */
+            function createGrid(){
+                //Admin can change these to make a bigger grid.
+                x = 10;
+                y = 10;
+                //store the y length.
+                yLen = y.toString().length;
+                //create a table element.
+                var t = document.createElement('TABLE');
+                //set the attribute of the created table
+                t.setAttribute("id", "myTable");
+                //center the table, by setting the style
+                t.style.margin = "0 auto";
+                //append the table to the table div.
+                document.getElementById("table").appendChild(t);
+                //get the table again, just to get its new positon in the DOM
+                var table = document.getElementById("myTable");
+                //Build the table by building up the columns in a row first before the next row.
+                for(i = 0; i < y; i++){
+                    //insert a row
+                    var newRow = table.insertRow(i);
+                    //build an ID from the row to use later for identification of the input in that cell.
+                    var tempPad = buildConcat(i);
+                    //go through the columns, i.e. x
+                    for(j = 0; j < x; j++){
+                        //insert the cell at j.
+                        var newCell = newRow.insertCell(j);
+                        //set some nice styling
+                        newCell.style.borderStyle = "solid";
+                        newCell.style.borderWidth = "1pt";
+                        newCell.style.width = "15pt";
+                        newCell.style.height = "15pt";
+                        //create the input element.
+                        input = document.createElement('input');
+                            //set it to only allow text and its default value being empty.
+                            input.setAttribute('type', 'text');
+                            input.setAttribute('maxlength','1');
+                            input.setAttribute('value' , '');
+                            //pad with correct amount of zeros, for the ID purposes.
+                            //only need to pad if rows before the final one.
+                            if(i.toString().length < yLen){input.setAttribute('id', tempPad +
+                                                                                             i.toString() + j.toString());
+                            }else{ input.setAttribute('id', i + '' + j);}
+                            input.style.width = "15pt";
+                            //add listeners to stop event propogation.
+                            input.addEventListener('keydown', cellClicked, false);
+                            //on cell up, call setup placement function, send the events on.
+                            input.addEventListener('keyup', function(){cellUp(this)}, false);
+                        //add the input to table cell.
+                        newCell.appendChild(input);
+
+                    }
+                }
+            }
+            
+            //determine if its a character or key and save accordingly.
+            function cellClicked(event){
+               if (event.charCode) {
+                    characterCode = event.charCode;
+               }else {
+                  characterCode = event.keyCode;
+               }
+               //Stop propogation of events from bubbling.
+               event.stopPropagation();
+            }
+            
+            /*
+                To place users keys, if they follow the rules, into the cells.
+            */
+            function cellUp(input){
+                //character code is user robot, i.e. 'u'
+                if(characterCode == 85){
+                    //if not placed, place lock and set position to the id of the cell.
+                    if(userPlaced != 1){
+                        input.setAttribute("readonly","readonly");
+                        currentUserPos = input.getAttribute("id");
+                        //add a listener to tell the user they can't change values
+                        input.parentNode.addEventListener('click',function(){alert("Can't Change Values!")}, false);
+                        userPlaced = 1;
+                    }
+                    else{ 
+                        //otherwise tell the user only one robot, and set to default, then blur.
+                        alert("Only one robot!");
+                        input.value = input.defaultValue;
+                        input.blur();
+                    }
+                }
+                //an obstacle so place and lock.
+                else if(characterCode == 79){
+                    input.setAttribute("readonly","readonly");
+                    input.parentNode.addEventListener('click',function(){alert("Can't Change Values!")}, false);
+                }
+                //a treasure so place and lock.
+                else if(characterCode > 48 && characterCode < 58){
+                    input.setAttribute("readonly","readonly");
+                    input.parentNode.addEventListener('click',function(){alert("Can't Change Values!")}, false);
+                    //increment the treasure count.
+                    treasureCount = treasureCount + 1;
+                }
+                //otherwise its a value that isn;t allowed.
+                else{ 
+                    alert("Only use o,u or 1-9");
+                    input.value=input.defaultValue;
+                    /* prevents bug where 10,20 etc.. can be typed quickly 
+                        so it would lock the cell after making it the defaultValue,
+                        hence remove the lock.
+                    */
+                    input.removeAttribute("readonly");
+                    
+                }
+            }
+            
+            /*
+                The function to set everything up for the play stage.
+            */
+            function playStage(){
+                //if robot not placed, tell user too place.
+                if (userPlaced == 0){
+                    alert('Place your robot');
+                }
+                //if treasures non-existent, then go straight to the end stage.
+                else if(treasureCount == 0){
+                    endStage();
+                }
+                //otherwise set-up
+                else{
+                    //on key down, call the move user function to move their robot.
+                    // will only work when they are allowed to move by the usersTurn var.
+                    document.onkeydown = moveUser;
+                    setUpScoreBoard();
+                    //hide the setup buttons, i.e. play.
+                    hide4Play();
+                    //lock all inputs now.
+                    lockInputs();
+                    //assign the computer robot
+                    assignRobot();
+                }
+            }
+            
+            // hide the play button and make the end button visible
+            function hide4Play(){
+                document.getElementById('p').style.visibility = "HIDDEN";
+                document.getElementById('e').style.visibility = "VISIBLE";
+            }
+            /*
+                Go through all inputs locking them and setting the event listeners.
+                Also remove the event listeners to place items accordingly into the boxes,
+                as otherwise these can add items behind the lock, i.e lead to a bug.
+            */
+            function lockInputs(){
+                //get array of all inputs
+                inputs = document.getElementsByTagName('input');   
+                for(i=0 ; i < inputs.length; i++){
+                    inputs[i].setAttribute("readonly","readonly");
+                    inputs[i].parentNode.addEventListener('click',function(){alert("Can't Change Values!")}, false);
+                    inputs[i].removeEventListener('keydown',cellClicked,false);
+                    inputs[i].removeEventListener('keyup',function(){cellUp(this)},false);
+                 }
+            }
+            
+            /*
+                Assign the robot to somewhere in the grid.
+            */
+            function assignRobot(){
+                //Get all inputs.
+                max = inputs.length;
+                min = 1;
+                set = 0;
+                /*
+                    While not set, make a random number from the max and min.
+                    min has to be one, but made up by -1 as should be 0. 
+                    Then get the value from the inputs, compare to values, and if empty then
+                    set to the computers robot and set the comp position.
+                */
+                while(set != 1){
+                    //-1 to allow for min being greater than should
+                    randomNumber = Math.floor((Math.random() * (max - min) + min))-1;
+                    var r = inputs[randomNumber].value;
+                    if (inputs[randomNumber].value == '' || inputs[randomNumber].value == inputs[randomNumber].defaultValue) {
+                        inputs[randomNumber].value = 'c';
+                        currentCompPos = inputs[randomNumber].getAttribute("id");
+                        set = 1;
+                    }
+                }
+            }
+            
+            /*
+                Setup the scoreboard
+            */
+            function setUpScoreBoard(){
+                /*  check is ending trigered, if yes don't perform.
+                    stops background bugs from trying to find items that don't exist in DOM.
+                    as this function is still in the call tree.
+                */
+                if(end != true){
+                    //clear the inside of the div
+                    document.getElementById('stats').innerHTML = "";
+                    //create a span, and set to the texts with necessary data set also.
+                    var scoreSpan = document.createElement('span')
+                    scoreSpan.innerHTML = 'Rounds Played: ' + rounds + '<br /> User Score: '
+                                                + userScore + ' | Computer Score: ' + computerScore;
+                    //add the span to the div, with the html in the span.
+                    document.getElementById('stats').appendChild(scoreSpan);
+                }
+            }
+            
+            /*
+                Function to deal with the movement of users.
+                Taking the event as a parameter.
+            */
+            function moveUser(e){
+                //only move if its the users turn.
+                if(usersTurn == 1){
+                    //set the character code.
+                    characterCode = e.keyCode;
+                    //get the users current position.
+                    var temp = document.getElementById(currentUserPos);
+                    /*
+                        Split the id's into their x,y positions.
+                        y is first so break that up first.
+                    */
+                    var row = currentUserPos.substring(0,yLen);
+                    //split up the x.
+                    var column = currentUserPos.substring(yLen, currentUserPos.length);
+                    //not moved.
+                    var moved = false;
+                    //cant move changes back to false everytime.
+                    cantMoveU = false;
+                    //switch statement for a,d,w,x
+                    switch(characterCode){
+                        //Move left.
+                        case 65:
+                            var lTemp = (parseInt(column) - 1);
+                            //make the id of the left element.
+                            var leftPos = row + lTemp;
+                            //get the left element.
+                            var leftTemp = document.getElementById(leftPos);
+                            //check if column is a negative
+                            if(0 >  lTemp){
+                                alert('Error: Outside the Grid');
+                            //position is empty, i.e. not treasure.
+                            }else if(empty(leftPos)){
+                                swapValues(temp,leftTemp,leftPos);
+                            //otherwise not empty and possibly treasure.
+                            }else{
+                                treasureObstacle(temp,leftTemp,leftPos);
+                            }
+                            moved = true;
+                            break;
+                       //Move right, same as above.
+                       case 68:
+                            var rTemp = (parseInt(column) + 1);
+                            var rightPos = row.toString() + rTemp.toString();
+                            var rightTemp = document.getElementById(rightPos);
+                            //check if outside of grid on the right, or if its moved up
+                            if(rTemp >= x){
+                                alert('Error: Outside the Grid');
+                            }else if(empty(rightPos)){
+                                swapValues(temp,rightTemp,rightPos);
+                            }else{
+                               treasureObstacle(temp,rightTemp,rightPos);
+                            }
+                            moved = true;
+                            break;
+                       case 87:
+                            //Move up.
+                            var aTemp = (parseInt(row) - 1);
+                            //build the row id back up with zeros.
+                            if(aTemp.toString().length < row.length){aTemp = buildConcat(aTemp) + aTemp;}
+                            //do same as above, but check for negatives with charAt.
+                            var abovePos = aTemp + column;
+                            var aboveTemp = document.getElementById(abovePos);
+                            if(aTemp.toString().charAt(0) == '-'){
+                                alert('Error: Outside the Grid');
+                            }else if(empty(abovePos)){
+                                swapValues(temp,aboveTemp,abovePos);
+                            }else{
+                               treasureObstacle(temp,aboveTemp,abovePos);
+                            }
+                            moved = true;
+                            break;
+                       case 88:
+                            //Move down, same as above.
+                            var bTemp = (parseInt(row) + 1);
+                            if(bTemp.toString().length < yLen){bTemp = buildConcat(bTemp) + bTemp;}
+                            var belowPos = bTemp + column;
+                            var belowTemp = document.getElementById(belowPos);
+                            if(y <= bTemp){
+                                alert('Error: Outside the Grid');
+                            }else if(empty(belowPos)){
+                                swapValues(temp,belowTemp,belowPos);
+                            }else{
+                                treasureObstacle(temp,belowTemp,belowPos);
+                            }
+                            moved = true;
+                            break;
+                        default:
+                            //No proper key pressed.
+                            alert("Only use 'a,x,d,w' for movement");
+                            break;
+                       }
+                }
+                //only if a proper key pressed carry on, otherwise go round again.
+                if(moved == true){
+                    usersTurn = 0; //stops keypress from doing anything
+                    //wrap in a function to ensure the delay works properly, 
+                    // ensure the user moves in the DOM before allowing computer to decide
+                    // where to move.
+                    setTimeout(function(){moveComputer()},50);
+                }else{
+                    document.onkeydown = moveUser;
+                }
+            }
+            
+            // get the id and check if that element is empty or not.
+            function empty(id){
+                var elem = document.getElementById(id);
+                if(elem == null){elem = '.';}
+                return Boolean(elem.value == '' || elem.value == elem.defaultValue);
+            }
+            
+            /*
+                Take old values and the new position.
+                Swap the values round, i.e. the user to the new location.
+            */
+            function swapValues(temp,xtemp,pos){
+                xtemp.value = temp.value;
+                temp.value = temp.defaultValue;
+                //build up the position of the user, with correct amount of zeros.
+                var tempPos = pad(pos,currentUserPos.length);
+                //set the current users position to pos.
+                currentUserPos = tempPos;
+            }
+            
+            /*
+                See swap values,
+                same in terms of functionality.
+            */
+            function treasureObstacle(temp,xtemp,pos){
+                /*  check is ending trigered, if yes don't perform.
+                    stops background bugs from trying to find items that don't exist in DOM.
+                    as this function is still in the call tree.
+                */
+                if(end != true){
+                    //if a number then treasure
+                    if(!isNaN(xtemp.value)){
+                        //increment users score.
+                        userScore += parseInt(xtemp.value);
+                        //decrement the treasures.
+                        treasureCount--;
+                        //swap values.
+                        swapValues(temp,xtemp,pos);
+                        //if treasures are 0 then end, as final treasure.
+                        if(treasureCount == 0){
+                            end = true;
+                            endStage();
+                        }
+                    //otherwise obstacle
+                    }else{
+                        alert("Error: Obstacle or robot in the way");
+                        //check if both can't move, i.e. both are true.
+                        if(cantMoveC && cantMoveU){endStage();}
+                        //set cant move to true.
+                        cantMoveU = true;
+                    }
+                }
+            }
+            
+            //function to move robot.
+            function moveComputer(){
+                //move robot, by checking surroundings and moving.
+                checkSurroundings();
+                //increment the number of rounds played.
+                rounds++;
+                //as computer always goes second, can reset the score board now
+                setUpScoreBoard();
+                //set users turn again to allow the cycle again, of user -> PC -> user.
+                usersTurn = 1;
+            }
+            
+            //check surroundings and move if can.
+            function checkSurroundings(){
+                //set a temp variable to computers current position.
+                var t = currentCompPos;
+                //pick the best move.
+                var m = pickViableMoves(t);
+                //if undefined build up the ID returned.
+                if(document.getElementById(m) == undefined){var m = buildConcat(m) + m;}
+                //for consistency, set elem and xelem and call swap values if empty.
+                // or swapPC if a treasure.
+                var elem = document.getElementById(t);
+                var xelem = document.getElementById(m);
+                if(empty(m)){
+                    swapValuesPC(elem,xelem,m);
+                }else{
+                    swapPC(elem,xelem,m);
+                }
+            }
+            
+            
+            /*
+                pick best move to do from surrounding cells.
+            */
+            function pickViableMoves(id){
+                //max found so far, set to current location.
+                var max = pad(parseInt(id),id.length);
+                //to check 3x3 grid, horizontal and vertical.
+                var intArrayH;
+                var intArrayV;
+                //set to 0, used to ensure all possibilities considered before saying can't move.
+                var spass = 0;
+                //to tell if the computer cant move, reset at start everytime.
+                cantMoveC = false;
+                //Switch case to allow for movement to change directions.
+                switch(defaultMove){
+                        case 1:
+                            //up right
+                            intArrayH = new Array(1,0,-1);
+                            intArrayV = new Array(-1,0,1);
+                            break;
+                        case 2:
+                            //up
+                            intArrayH = new Array(0,-1,1);
+                            intArrayV = new Array(-1,0,1);
+                            break;
+                        case 3:
+                            //up left
+                            intArrayH = new Array(-1,0,1);
+                            intArrayV = new Array(-1,0,1);
+                            break;
+                        case 4:
+                            //left
+                            intArrayH = new Array(-1,0,1);
+                            intArrayV = new Array(0,1,-1);
+                            break;
+                        case 5:
+                            //right
+                            intArrayH = new Array(1,0,-1);
+                            intArrayV = new Array(0,1,-1);
+                            break;
+                        case 6:
+                            //down left
+                            intArrayH = new Array(-1,0,1);
+                            intArrayV = new Array(1,0,-1);
+                            break;
+                        case 7:
+                            //down
+                            intArrayH = new Array(0,1,-1);
+                            intArrayV = new Array(1,0,-1);
+                            break;
+                        case 8:
+                            //down right
+                            intArrayH = new Array(1,0,-1);
+                            intArrayV = new Array(1,0,-1);
+                            break;
+                        default: 
+                            //default movement
+                            intArrayH = new Array(0,1,-1);
+                            intArrayV = new Array(0,1,-1);
+                            break;
+                        
+                }       
+                //split up into 2 parts, x & y
+                var row = id.substring(0,yLen);
+                var column = id.substring(yLen, id.length);
+                
+                var temp = false;
+                /*
+                    Go through all directions possible, in 3x3 grid.
+                    if its an obstacle or robot, don't count and move on.
+                    same happens if out of bounds, as cant get element is thrown.
+                */
+                
+                for(i=0; i<intArrayV.length; i++){
+                    //rest row to go through.
+                    var rowz = parseInt(row) + intArrayV[i];
+                    //go through horizontal array for rows
+                    for(j=0;j<intArrayH.length;j++){
+                        //go through different columns
+                        var columnz = parseInt(column) + intArrayH[j];
+                        //combine to make ID again.
+                        var num = rowz.toString() + columnz.toString();
+                        //pad with zeroes if necessary.
+                        num = pad(num,id.length);
+                        //if its out of bounds catch and ignore it from consideration
+                        try{
+                            var val = document.getElementById(num).value;
+                            var maxVal = document.getElementById(max).value;
+                            if(val == 'u' || val == 'o'){
+                                throw 'cant move';
+                            }
+                        }catch(err){
+                           continue;
+                        }    
+                        //compare current value to max value found so far.
+                        // ensures biggest treasure is caught first.
+                        if(!isNaN(val) && val > maxVal){
+                            max = num;
+                        }
+                        /*
+                            if not changed then change and change direction, as its likely that 
+                            everything either went out of bounds or hit an object.
+                        */
+                        if(max == id){
+                            max = num;
+                            //keep randomising the movement, for the next time.
+                            if(defaultMove == 8){defaultMove = 0;}
+                            else{defaultMove++;}
+                            //increase so later can tell all moves considered, i.e. all 9 cells.
+                            spass++;
+                        }
+                     }
+                }
+                //if both can't move end, have max == id to ensure
+                if(cantMoveU && max == id && cantMoveC ){endStage();}
+                //can't move at all, so set to true.
+                if(max == id && spass == 9){cantMoveC = true;}
+                //return best move.
+                return max;
+            }
+            
+            // swap values as its empty.
+            function swapValuesPC(tempPC,xtemp,pos){
+                /*  check is ending trigered, if yes don't perform.
+                    stops background bugs from trying to find items that don't exist in DOM.
+                    as this function is still in the call tree.
+                */
+                if(end != true){
+                    xtemp.value = tempPC.value;
+                    tempPC.value = tempPC.defaultValue;
+                    //pad accordingly
+                    var tempPos = pad(pos,currentCompPos.length);
+                    currentCompPos = tempPos;
+                }
+            }
+            
+            //swap for treasures
+            function swapPC(temp,xtemp,pos){
+                computerScore = parseInt(computerScore) + parseInt(xtemp.value);
+                //decrement the treasure count
+                treasureCount--;
+                //if its 0 then end.
+                if(treasureCount == 0){
+                        end = true;
+                        endStage();
+                }
+                //now swap values that we've added the treasures value to the current score.
+                swapValuesPC(temp,xtemp,pos);
+                
+            }
+            
+            //end stage, to determine out come and output the stats
+            function endStage(){
+                //do nothing on key downs
+                document.onkeydown = "";
+                document.getElementById("outer").innerHTML = "";
+                //output the stats to the inner html in the outer div.
+                if(userScore == computerScore){
+                    document.getElementById("outer").innerHTML = "DRAW! YOU " + userScore + " - " + computerScore + " COMPUTER";
+                }else if(userScore > computerScore){
+                    document.getElementById("outer").innerHTML = "YOU WIN! YOU " + userScore + " - " + computerScore + " COMPUTER";
+                }else{
+                    document.getElementById("outer").innerHTML = "COMPUTER WINS! COMPUTER " + computerScore + " - " + userScore + " YOU";
+                }
+            }
+            
+            // pad function to add number of zeros in the size part.
+            function pad(num,size) {
+                var s = num+"";
+                while (s.length < size) s = "0" + s;
+                return s;
+            }   
+        </script>
+         <!-- END OF GAME JS -->
+    </head>
+    <body>
+        <!-- Create a div aligned center for final outcome purposes. -->
+        <div style='text-align:center; padding-top:40px;' id="outer">
+            <p style="margin-bottom:40px;">The Pressing of enter upon alerts is not allowed</p>
+            <!--  Create a div aligned center for scoreboard -->
+            <div id="stats"></div>
+            <!-- Create a div to store the table in -->
+            <div id="table"></div>
+            <!-- Have button to go to play stage and end stage, hidden and visible as neccessary.-->
+            <button id="p" onclick="playStage()" style="margin-top:40px;">PLAY</button>
+            <br />
+            <button id="e" onclick="endStage()" style="margin-top:-5px;visibility:hidden;">END</button>
+        </div>
+        <!-- Everything in DOM set-up so create the setup grid and part. -->
+        <script type="text/javascript">createGrid();</script>
+    </body>
+</html>
